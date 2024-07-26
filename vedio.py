@@ -28,7 +28,6 @@ def monitor_foreground_process():
     pid = get_process_id_from_window_title(current_window_name)
     return pid
 
-
 if __name__ == '__main__':
     process_list = ['Wireshark.exe', 'wc32.exe', 'Fiddler.exe']
     current_monitored_process = ''
