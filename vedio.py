@@ -8,61 +8,71 @@ import win32gui
 import win32process
 import subprocess
 from datetime import datetime
+
+
 def get_process_id_by_name(process_name):
     for process in psutil.process_iter(['pid', 'name']):
         if process.info['name'] == process_name:
             return process.info['pid']
+
+
 def get_process_id_from_window_title(title):
-	handle = win32gui.FindWindow(None, title)
-	thread_id, process_id = win32process.GetWindowThreadProcessId(handle)
-	return process_id
-def monitor_foreground_process(Foreground_process_pid):
-    """
-    监测条件并更新共享变量的进程
-    """
-    while True:
-        current_window = win32gui.GetForegroundWindow()
-        current_window_name = win32gui.GetWindowText(current_window)
-        pid = get_process_id_from_window_title(current_window_name)
-        with Foreground_process_pid.get_lock():
-            Foreground_process_pid.value = pid
-        time.sleep(1)  # 暂停 1 秒钟
-        # print("monitor_foreground_process:",Foreground_process_pid.value)
+    handle = win32gui.FindWindow(None, title)
+    thread_id, process_id = win32process.GetWindowThreadProcessId(handle)
+    return process_id
+
+
+def monitor_foreground_process():
+    current_window = win32gui.GetForegroundWindow()
+    current_window_name = win32gui.GetWindowText(current_window)
+    pid = get_process_id_from_window_title(current_window_name)
+    return pid
+
+
 if __name__ == '__main__':
-    Foreground_process_pid = multiprocessing.Value('i', 0)
-    monitor_process = multiprocessing.Process(target=monitor_foreground_process, args=(Foreground_process_pid,))
-    monitor_process.start()
-    process_list=['Wireshark.exe','wc32.exe','Fiddler.exe']
+
+    process_list = ['Wireshark.exe', 'wc32.exe', 'Fiddler.exe']
     current_monitored_process = ''
-    current_monitor_id=-1
+    current_monitor_id = -1
     # 无限循环
     while True:
         # 遍历进程列表
         for process_name in process_list:
             flag = 0
-            current_monitor_id=-1
-            target_id=get_process_id_by_name(process_name)
+            current_monitor_id = -1
+            target_id = get_process_id_by_name(process_name)
             # print("target_id",target_id)
-            if target_id and Foreground_process_pid.value==target_id:
-                current_monitored_process=Foreground_process_pid.value
+            if target_id and monitor_foreground_process() == target_id:
+                current_monitored_process = monitor_foreground_process()
                 # print("while True:",current_monitored_process)
                 ffmpeg_path = os.path.join(os.getcwd(), "bin", "ffmpeg.exe")
-                output_file=process_name+'_'+datetime.now().strftime("%Y%m%d_%H%M%S")+'.mp4'
-                output_path=  os.path.join(os.getcwd(), "output", output_file)
-                cmd = f"{ffmpeg_path} -f gdigrab -i desktop -c:v libx264 -crf 0 -preset ultrafast {output_path}"
+                output_file = process_name + '_' + datetime.now().strftime("%Y%m%d_%H%M%S") + '.mp4'
+                output_path = os.path.join(os.getcwd(), "output")
+                if not os.path.exists(output_path):
+                    # 如果不存在，创建目标文件夹
+                    os.makedirs(output_path)
+                    print(f"Created folder: {output_path}")
+                else:
+                    print(f"Folder already exists: {output_path}")
+                output_file = output_path + '\\' + output_file
+                print(output_file)
+                cmd = f"{ffmpeg_path} -f gdigrab -i desktop -c:v libx264 -crf 0 -preset ultrafast {output_file}"
                 # print(cmd)
-                proc = subprocess.Popen(cmd, shell=True,stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                print("创建进程")
+                proc = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                 print("start Record")
-                current_monitor_id=proc.pid
+                current_monitor_id = proc.pid
                 # 阻塞在这个地方
                 print(current_monitor_id)
-                while Foreground_process_pid.value==target_id:
+                while monitor_foreground_process() == target_id:
                     continue
-                flag=1
-            if current_monitor_id!=-1 and flag==1:
+                flag = 1
+            if current_monitor_id != -1 and flag == 1:
                 proc.stdin.write('q'.encode("GBK"))
                 proc.communicate()
                 proc.kill()
                 time.sleep(5)
                 print("Screen recording generate.")
+
+        time.sleep(2)
 
